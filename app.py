@@ -5,7 +5,7 @@ from wtforms.validators import InputRequired,Email,EqualTo,Length
 from flask_wtf import FlaskForm
 from flask_wtf.csrf import CSRFProtect
 import email_validator
-from flask_login import LoginManager,login_required,login_user,UserMixin,current_user
+from flask_login import LoginManager,login_required,login_user,UserMixin,current_user,logout_user
 from urllib.parse import urljoin,urlparse,parse_qs
 import os
 from dotenv import load_dotenv
@@ -71,7 +71,12 @@ def register():
 def dashboard():
     
     return render_template('dashboard.html',username=current_user.username)
-
+#logout user
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('home'))
 #load user
 #from stored user id
 '''
