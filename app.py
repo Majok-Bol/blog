@@ -7,12 +7,19 @@ from flask_wtf.csrf import CSRFProtect
 import email_validator
 from flask_login import LoginManager,login_required,login_user,UserMixin,current_user,logout_user
 from urllib.parse import urljoin,urlparse,parse_qs
+#use rate limiting
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_bcrypt import Bcrypt
 import os
+import uuid
 from dotenv import load_dotenv
 load_dotenv()
 #initialize app with flask
 app=Flask(__name__)
 db=app.config['SQLALCHEMY_DATABASE_URI']=os.getenv("DATABASE_URL")
+#initialize bcrypt
+bcrypt=Bcrypt(app)
 #secret key for csrf protection
 app.config["SECRET_KEY"]=os.getenv("SECRET_KEY")
 csrf=CSRFProtect()
@@ -29,21 +36,35 @@ login_manager.login_view="login"
 def home():
     return render_template("home.html",name="Bashbytes")
 
+#limit by username and IP
+limiter=Limiter(key_func=get_remote_address,app=app,default_limits=["200 per day","50 per hour"])
+def login_limit_key():
+    return(request.form.get("username","")+"_"+request.remote_addr)
+
 @app.route("/login",methods=['POST','GET'])
+#only allow 5 login attempts per minute per IP
+@limiter.limit("5 per minute",key_func=login_limit_key)
 def login():
     #login form instance
     form=LoginForm()
     if form.validate_on_submit():
         #check if user exists in the database
         user=User.query.filter_by(username=form.username.data).first()
-        if user and user.password==form.password.data:
+        # print("User found: ",user)
+        if user and bcrypt.check_password_hash(user.password,form.password.data):
             flash('Login successful')
             login_user(user)
             next_page=request.args.get("next")
             if next_page and is_safe_url(next_page):
                 return redirect(next_page)
-        return redirect(url_for('dashboard'))
+            return redirect(url_for('dashboard'))
+        flash("Invalid username or password")
     return render_template("login.html",form=form)
+#custom error message
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return(render_template("429.html",message="Too many login attempts.Please try again later."),429)
+
 #define how to secure url parsing
 def is_safe_url(target):
     host_url=urlparse(request.host_url)
@@ -58,9 +79,17 @@ def register():
     #register form instance
     form=RegisterForm()
     if form.validate_on_submit():
-        user=User(username=form.username.data,email=form.email.data,password=form.password.data)
+        #check if user exists
+        user=User.query.filter_by(username=form.username.data).first()
+        if user:
+            flash('User exists')
+            return redirect(url_for('login'))
+        #if not user
+        #hash password
+        password_hashed=bcrypt.generate_password_hash(form.password.data).decode('utf-8')
+        new_user=User(username=form.username.data,email=form.email.data,password=password_hashed)
         #add user to the database
-        db.session.add(user)
+        db.session.add(new_user)
         #save changes to the database
         db.session.commit()
         return redirect(url_for('login'))
@@ -109,8 +138,9 @@ class LoginForm(FlaskForm):
     password=PasswordField(validators=[InputRequired(),Length(max=255)])
     submit=SubmitField("Login")
 #create database 
+#use uuid4 instead of incrementing IDs
 class User(db.Model,UserMixin):
-    id=db.Column(db.Integer,primary_key=True)
+    id=db.Column(db.String(255),primary_key=True,default=lambda:str(uuid.uuid4()))
     username=db.Column(db.String(50),nullable=False,unique=True)
     email=db.Column(db.String(100),nullable=False,unique=True)
     password=db.Column(db.String(255),nullable=False,unique=True)
@@ -119,4 +149,5 @@ class User(db.Model,UserMixin):
 if __name__=="__main__":
     with app.app_context():
         db.create_all()
+        #  db.drop_all()
     app.run(debug=True)

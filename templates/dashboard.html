@@ -2,7 +2,12 @@
 {%block title%}Dashboard
 {%endblock%}
 {%block content%}
+
 {%if current_user.is_authenticated%}
-Hi {{current_user.username}}
+<section>
+    <p>
+        Hi <strong> {{current_user.username}}</strong></p>
+    <p>Welcome to your dashboard</p>
+</section>
 {%endif%}
 {%endblock%}
