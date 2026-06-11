@@ -68,7 +68,7 @@ def ratelimit_handler(e):
 #define how to secure url parsing
 def is_safe_url(target):
     host_url=urlparse(request.host_url)
-    print("Host url: ",host_url)
+    # print("Host url: ",host_url)
     redirect_url=urlparse(urljoin(request.host_url,target))
     return(
         redirect_url.scheme in ("http","https") and host_url.netloc==redirect_url.netloc
@@ -98,7 +98,6 @@ def register():
 @app.route('/dashboard',methods=['POST','GET'])
 @login_required
 def dashboard():
-    
     return render_template('dashboard.html',username=current_user.username)
 #logout user
 @app.route("/logout")
@@ -117,13 +116,13 @@ It should take the str ID of a user, and return the corresponding user object
 def load_user(user_id):
     return User.query.get(user_id)
 #using urllib
-base_url='https://fakestoreapi.com'
-target_url="/products"
-combined_url=urljoin(base_url,target_url)
-print("Combined url: ",combined_url)
-example_url=urlparse( "https://www.example.com:8080/products/laptop?id=10&sort=price#reviews")
-print("Parsed query string: ",parse_qs(example_url.query))
-print(example_url)
+# base_url='https://fakestoreapi.com'
+# target_url="/products"
+# combined_url=urljoin(base_url,target_url)
+# print("Combined url: ",combined_url)
+# example_url=urlparse( "https://www.example.com:8080/products/laptop?id=10&sort=price#reviews")
+# print("Parsed query string: ",parse_qs(example_url.query))
+# print(example_url)
 #register form class
 class RegisterForm(FlaskForm):
     username=StringField("Username",validators=[InputRequired(),Length(min=4)])
@@ -148,6 +147,8 @@ class User(db.Model,UserMixin):
 #check if app is run from current module
 if __name__=="__main__":
     with app.app_context():
+        #create data in the database
         db.create_all()
+        #delete database data
         #  db.drop_all()
     app.run(debug=True)
