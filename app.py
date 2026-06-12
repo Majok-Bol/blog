@@ -1,6 +1,6 @@
 from flask import Flask,render_template,url_for,redirect,request,flash
 from flask_sqlalchemy import SQLAlchemy
-from wtforms import StringField,BooleanField,EmailField,PasswordField,SubmitField
+from wtforms import StringField,BooleanField,EmailField,PasswordField,SubmitField,DateField,TextAreaField
 from wtforms.validators import InputRequired,Email,EqualTo,Length
 from flask_wtf import FlaskForm
 from flask_wtf.csrf import CSRFProtect
@@ -11,6 +11,7 @@ from urllib.parse import urljoin,urlparse,parse_qs
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_bcrypt import Bcrypt
+from datetime import datetime,UTC
 import os
 import uuid
 from dotenv import load_dotenv
@@ -73,7 +74,7 @@ def is_safe_url(target):
     return(
         redirect_url.scheme in ("http","https") and host_url.netloc==redirect_url.netloc
     )
-
+#handle registration feature
 @app.route("/register",methods=['POST','GET'])
 def register():
     #register form instance
@@ -114,7 +115,8 @@ It should take the str ID of a user, and return the corresponding user object
 '''
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(user_id)
+    # return User.query.get(user_id)
+    return db.session.get(User,user_id)
 #using urllib
 # base_url='https://fakestoreapi.com'
 # target_url="/products"
@@ -123,6 +125,26 @@ def load_user(user_id):
 # example_url=urlparse( "https://www.example.com:8080/products/laptop?id=10&sort=price#reviews")
 # print("Parsed query string: ",parse_qs(example_url.query))
 # print(example_url)
+
+@app.route("/create_post",methods=["POST","GET"])
+@login_required
+def create_post():
+    post=CreatePost()
+    if post.validate_on_submit():
+        new_post=Post(title=post.title.data,body=post.body.data,user_id=current_user.id)
+        #add to the database
+        db.session.add(new_post)
+        db.session.commit()
+        return redirect(url_for('posts'))
+    return render_template('create_post.html',post=post)
+#render posts
+@app.route("/posts")
+def posts():
+    posts=Post.query.all()
+    if posts:
+        return render_template("posts.html",posts=posts)
+    return redirect(url_for("create_post"))
+
 #register form class
 class RegisterForm(FlaskForm):
     username=StringField("Username",validators=[InputRequired(),Length(min=4)])
@@ -136,14 +158,30 @@ class LoginForm(FlaskForm):
     username=StringField("Username",validators=[InputRequired(),Length(min=4)])
     password=PasswordField(validators=[InputRequired(),Length(max=255)])
     submit=SubmitField("Login")
+#text area for creating post
+class CreatePost(FlaskForm):
+    created_at=DateField("Created_at",format='%Y-%m-%d',default=lambda:datetime.now(UTC))
+    title=StringField("Title",validators=[InputRequired(),Length(min=4)])
+    body=TextAreaField("Body",validators=[InputRequired(),Length(min=10)])
+    submit=SubmitField("Create post")
 #create database 
 #use uuid4 instead of incrementing IDs
 class User(db.Model,UserMixin):
+    __tablename__="users"
     id=db.Column(db.String(255),primary_key=True,default=lambda:str(uuid.uuid4()))
     username=db.Column(db.String(50),nullable=False,unique=True)
     email=db.Column(db.String(100),nullable=False,unique=True)
     password=db.Column(db.String(255),nullable=False,unique=True)
-
+    posts=db.relationship("Post",back_populates="author")
+#create post table
+class Post(db.Model):
+    __tablename__="posts"
+    post_id=db.Column(db.String(255),primary_key=True,default=lambda:str(uuid.uuid4()))
+    title=db.Column(db.String(100))
+    body=db.Column(db.Text)
+    #user id is a foreign key which is a primary key in users table
+    user_id=db.Column(db.String,db.ForeignKey("users.id"))
+    author=db.relationship("User",back_populates="posts")
 #check if app is run from current module
 if __name__=="__main__":
     with app.app_context():
